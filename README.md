@@ -24,7 +24,7 @@ Really simple installation
 --------------------------
 
 * Put the Gurobi jar on the classpath.
-* `mvn clean verify to build from source.
+* `mvn clean verify` to build from source.
 * `java -cp  /Library/gurobi650/mac64/lib/gurobi.jar  -jar tpa-cli/target/tpa-cli-*-jar-with-dependencies.jar -help`  for command line options.
 * Point a local web server to the output directory.
 
