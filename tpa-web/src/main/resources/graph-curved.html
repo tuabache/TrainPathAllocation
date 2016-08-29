@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<!-- Sources:
+ force-directed graph: http://bl.ocks.org/mbostock/4062045
+ tooltip: http://www.d3noob.org/2013/01/adding-tooltips-to-d3js-graph.html
+ force-multi-foci with convex hulls: http://bl.ocks.org/donaldh/2920551
+
+ -->
+
+<meta charset="utf-8">
+<!--<script src="http://d3js.org/d3.v3.js"></script>-->
+<script src="d3.v3.js"></script>
+<style>
+
+    path.link1 {
+    fill: none;
+    stroke: #666;
+    stroke-width: 1.5px;
+    }
+
+    path.link2 {
+    fill: none;
+    stroke: #FF0000;
+    stroke-width: 1.5px;
+    }
+
+    path.link3 {
+    fill: none;
+    stroke: #006600;
+    stroke-width: 1.5px;
+    }
+
+    path.link4 {
+    fill: none;
+    stroke: #666;
+    stroke-width: 1.5px;
+    }
+
+    circle {
+    fill: #ccc;
+    stroke: #fff;
+    stroke-width: 1.5px;
+    }
+
+    text {
+    fill: #000;
+    font: 10px sans-serif;
+    pointer-events: none;
+    }
+
+    div.tooltip {
+    position: absolute;
+    text-align: center;
+    width: 200px;
+    height: 100px;
+    padding: 2px;
+    font: 12px sans-serif;
+    background: lightsteelblue;
+    border: 0px;
+    border-radius: 8px;
+    pointer-events: none;
+    }
+
+    .node.fixed circle{
+    stroke: #f00;
+    }
+
+
+</style>
+<body>
+<script>
+
+// get the data
+d3.csv("$CSVNAME$.csv", function(error, links) {
+
+var nodes = {};
+
+// Compute the distinct nodes from the links.
+links.forEach(function(link) {
+    link.source = nodes[link.source] || 
+        (nodes[link.source] = {name: link.source, group: link.sourceGroup, groupDescription: link.sourceGroupDescription});
+    link.target = nodes[link.target] || 
+        (nodes[link.target] = {name: link.target, group: link.targetGroup, groupDescription: link.targetGroupDescription});
+    link.category = +link.category;
+});
+
+groupNodes = d3.values(nodes).filter(function(node){
+    return node.group;
+});
+
+var groups = d3.nest().key(function(d) {
+    return d.group }).entries(groupNodes);
+var nodeToGroupMap = {};
+
+groups.forEach(function(group, i){
+    group.groupDescription = group.values[0].groupDescription;
+    group.values.forEach(function(node){
+        nodeToGroupMap[node.name] = i;
+    });
+});
+
+var groupPath = function(d) {
+    var hull= "M" +
+      d3.geom.hull(d.values.map(function(i) {
+        return [i.x, i.y];
+      }))
+        .join("L")
+    + "Z";
+    // if there's no hull, return null....
+    if(hull == "MZ"){
+        return null;
+    }
+    return hull;
+};
+var groupFill = function(d, i) { return fill(i); };
+var fill = d3.scale.category10();
+
+
+var width = 2000,
+    height = 1500;
+
+var force = d3.layout.force()
+    .nodes(d3.values(nodes))
+    .links(links)
+    .size([width, height])
+    .linkDistance(150)
+    .charge(-300)
+    .on("tick", function () {
+        // add the curvy lines
+        path.attr("d", function(d) {
+            var dx = d.target.x - d.source.x,
+                dy = d.target.y - d.source.y,
+                dr = Math.sqrt(dx * dx + dy * dy);
+            return "M" +
+                d.source.x + "," +
+                d.source.y + "A" +
+                dr + "," + dr + " 0 0,1 " +
+                d.target.x + "," +
+                d.target.y;
+        });
+
+        node
+            .attr("transform", function(d) {
+            return "translate(" + d.x + "," + d.y + ")"; });
+        svg.selectAll(".hull")
+            .data(groups)
+              .attr("d", groupPath);
+        })
+    .start();
+// add div for svg
+var div = d3.select("body").append("div");
+
+var svg = d3.select("body").select("div").append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+// add the hull
+var hull = svg.append("svg:g").selectAll("hull")
+    .data(groups)
+      .attr("d", groupPath)
+    .enter().insert("path", "circle")
+      .attr("class", "hull")
+      .style("fill", groupFill)
+      .style("stroke", groupFill)
+      .style("stroke-width", 40)
+      .style("stroke-linejoin", "round")
+      .style("opacity", .2)
+      .attr("d", groupPath)
+      .on("mouseover", function(d){
+        div.transition()
+                .duration(200)
+                .style("opacity", .9);
+        div .html(d.groupDescription)
+            .style("left", (d3.event.pageX) + "px")
+            .style("top", (d3.event.pageY - 28) + "px");
+    });
+
+// build the arrow.
+svg.append("svg:defs").selectAll("marker")
+    .data(["end"])      // Different link/path types can be defined here
+  .enter().append("svg:marker")    // This section adds in the arrows
+    .attr("id", String)
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 15)
+    .attr("refY", -1.5)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+  .append("svg:path")
+    .attr("d", "M0,-5L10,0L0,5");
+
+// add the links and the arrows
+var path = svg.append("svg:g").selectAll("path")
+    .data(force.links())
+  .enter().append("svg:path")
+    .attr("class", function(d) { return "link" + (d.category || 1); })
+    .attr("marker-end", function(d) { return (d.category == 4)? "": "url(#end)"})
+    .on("mouseover", function(d){
+        div.transition()
+                .duration(200)
+                .style("opacity", .9);
+        div .html(d.linkDescription)
+            .style("left", (d3.event.pageX) + "px")
+            .style("top", (d3.event.pageY - 28) + "px");
+    })
+    .on("mouseout", function(d) {
+        div.transition()
+            .duration(500)
+            .style("opacity", 0);
+    });;
+
+
+// define the nodes
+var node = svg.selectAll(".node")
+    .data(force.nodes())
+  .enter().append("g")
+    .attr("class", "node")
+//    .attr("class", function(d) { if ((/_start$/).test(d.name)) {return "node fixed"} if ((/_end$/).test(d.name)){return "node fixed"} return "node"; })
+    .call(force.drag)
+    .on("dblclick", function (d) {
+          d3.select(this).classed("fixed", d.fixed = !d.fixed);
+        })
+
+// add the nodes
+var color = d3.scale.category20();
+
+node.append("circle")
+    .attr("r", 5)
+     .style("fill", function(d) {
+        return fill(nodeToGroupMap[d.name]);
+       });
+
+// add the text
+node.append("text")
+    .attr("x", 12)
+    .attr("dy", ".35em")
+    .text(function(d) { return d.name; });
+
+// add the tooltip div
+var div = d3.select("body").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
+
+
+
+
+});
+
+
+
+
+
+
+
+
+
+</script>
+$HTML$
+</body>
+</html>
